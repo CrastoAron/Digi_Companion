@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Small custom styles */
+html, body, #root {
+  height: 100%;
+}
+
+.dark .dark\:bg-gray-900 { background-color: #111827; }
+
+/* You can add small app-specific customizations below */
