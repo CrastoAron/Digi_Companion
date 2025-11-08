@@ -1,0 +1,4 @@
+fastapi
+uvicorn
+pyttsx3
+requests
