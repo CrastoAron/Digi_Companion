@@ -1,68 +1,106 @@
-import React, { useState } from 'react';
-import { MicrophoneIcon, StopCircleIcon, SparklesIcon } from '@heroicons/react/24/solid';
+import React, { useState, useEffect } from 'react';
+import { MicrophoneIcon, StopCircleIcon, SparklesIcon, VolumeUpIcon, VolumeXIcon } from '@heroicons/react/24/solid';
 
 const VoiceAssistant = () => {
   const [isRecording, setIsRecording] = useState(false);
-  const [feedback, setFeedback] = useState({ message: 'Tap to start voice command', type: 'info' });
-  const [recognition, setRecognition] = useState(null);
+  const [feedback, setFeedback] = useState({
+    message: '🎙️ Tap the mic to start speaking',
+    type: 'info',
+  });
+  const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [aiVoiceEnabled, setAiVoiceEnabled] = useState(true);
 
-  const startRecording = () => {
-    if (!('webkitSpeechRecognition' in window)) {
-      setFeedback({ message: 'Speech recognition not supported in this browser.', type: 'error' });
-      return;
-    }
+  // 🧩 Load available voices (for better accents)
+  const [voices, setVoices] = useState([]);
+  useEffect(() => {
+    const loadVoices = () => setVoices(window.speechSynthesis.getVoices());
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    loadVoices();
+  }, []);
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recog = new SpeechRecognition();
-    recog.lang = 'en-IN';
-    recog.interimResults = false;
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      let audioChunks = [];
 
-    recog.onstart = () => {
+      recorder.ondataavailable = (event) => audioChunks.push(event.data);
+
+      recorder.onstop = async () => {
+        setIsRecording(false);
+        setFeedback({ message: '🧠 Processing your speech...', type: 'processing' });
+
+        const blob = new Blob(audioChunks, { type: 'audio/webm' });
+        const formData = new FormData();
+        formData.append('file', blob, 'speech.webm');
+
+        try {
+          // 🎤 Step 1: Convert speech → text
+          const res = await fetch('http://localhost:9000/speech', {
+            method: 'POST',
+            body: formData,
+          });
+          const data = await res.json();
+          const transcript = data.text?.trim() || '[No speech detected]';
+          setFeedback({ message: `🗣️ You said: "${transcript}"`, type: 'success' });
+
+          // 🧠 Step 2: Send text → Ollama AI
+          const aiRes = await fetch('http://localhost:9000/process', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: transcript }),
+          });
+          const aiData = await aiRes.json();
+          const reply = aiData.response || '🤔 No response from AI.';
+          setFeedback({ message: reply, type: 'success' });
+
+          // 🔊 Step 3: Speak AI reply aloud
+          if (aiVoiceEnabled && 'speechSynthesis' in window) {
+            const utter = new SpeechSynthesisUtterance(reply);
+            utter.lang = 'en-IN';       // Indian English accent
+            utter.pitch = 1.0;
+            utter.rate = 0.95;
+            utter.volume = 1.0;
+            utter.voice = voices.find(v => v.lang.startsWith('en')) || null;
+            window.speechSynthesis.cancel(); // stop any ongoing speech
+            window.speechSynthesis.speak(utter);
+          }
+        } catch (err) {
+          console.error('Error:', err);
+          setFeedback({ message: '⚠️ Error processing speech.', type: 'error' });
+        } finally {
+          stream.getTracks().forEach((t) => t.stop());
+        }
+      };
+
+      recorder.start();
       setIsRecording(true);
-      setFeedback({ message: '🎙️ Listening... speak now', type: 'listening' });
-    };
+      setMediaRecorder(recorder);
+      setFeedback({ message: '🎧 Listening... Speak now!', type: 'listening' });
 
-    recog.onresult = async (event) => {
-      const transcript = event.results[0][0].transcript;
-      setFeedback({ message: `🗣️ You said: "${transcript}"`, type: 'processing' });
-      setIsRecording(false);
-
-      try {
-        const res = await fetch('http://localhost:9000/process', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: transcript }),
-        });
-        const data = await res.json();
-        const reply = data.response || 'No response from AI.';
-
-        setFeedback({ message: reply, type: 'success' });
-
-        // Speak the AI’s reply aloud
-        const utter = new SpeechSynthesisUtterance(reply);
-        utter.rate = 0.95;
-        window.speechSynthesis.speak(utter);
-      } catch (error) {
-        console.error('Error talking to AI:', error);
-        setFeedback({ message: '⚠️ Could not connect to AI service.', type: 'error' });
-      }
-    };
-
-    recog.onerror = () => {
-      setFeedback({ message: 'Microphone error. Try again.', type: 'error' });
-      setIsRecording(false);
-    };
-
-    recog.onend = () => setIsRecording(false);
-
-    setRecognition(recog);
-    recog.start();
+      setTimeout(() => recorder.state === 'recording' && recorder.stop(), 5000);
+    } catch (err) {
+      console.error('Microphone error:', err);
+      setFeedback({ message: '🚫 Microphone access denied.', type: 'error' });
+    }
   };
 
   const stopRecording = () => {
-    if (recognition) recognition.stop();
-    setIsRecording(false);
-    setFeedback({ message: 'Processing...', type: 'processing' });
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+      setIsRecording(false);
+      setFeedback({ message: '🧠 Processing...', type: 'processing' });
+    }
+  };
+
+  const toggleVoice = () => {
+    setAiVoiceEnabled(!aiVoiceEnabled);
+    setFeedback({
+      message: aiVoiceEnabled
+        ? '🔇 AI voice disabled.'
+        : '🔊 AI voice enabled.',
+      type: 'info',
+    });
   };
 
   return (
@@ -73,24 +111,46 @@ const VoiceAssistant = () => {
 
       <button
         onClick={() => (isRecording ? stopRecording() : startRecording())}
-        className={`relative w-20 h-20 rounded-full flex items-center justify-center text-white ${isRecording ? 'bg-red-600' : 'bg-indigo-600'} mx-auto mb-4`}
+        className={`relative w-20 h-20 rounded-full flex items-center justify-center text-white transition-all duration-300 ${
+          isRecording ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'
+        } mx-auto mb-4`}
       >
         {isRecording ? <StopCircleIcon className="h-8 w-8" /> : <MicrophoneIcon className="h-8 w-8" />}
-        {isRecording && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-50"></span>}
+        {isRecording && (
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-50"></span>
+        )}
       </button>
 
+      <div className="flex justify-center mb-3">
+        <button
+          onClick={toggleVoice}
+          className={`px-3 py-1 rounded-full text-sm font-medium ${
+            aiVoiceEnabled
+              ? 'bg-green-100 text-green-800 hover:bg-green-200'
+              : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+          } transition-all`}
+        >
+          {aiVoiceEnabled ? '🔊 Voice On' : '🔇 Voice Off'}
+        </button>
+      </div>
+
       <div
-        className={`rounded-full py-2 px-4 text-sm font-medium w-full max-w-md mx-auto ${
+        className={`rounded-xl p-4 text-sm font-medium w-full max-w-md mx-auto text-left overflow-y-auto shadow-inner ${
           feedback.type === 'processing'
-            ? 'bg-indigo-100 text-indigo-800'
+            ? 'bg-indigo-50 text-indigo-800'
             : feedback.type === 'success'
-            ? 'bg-green-100 text-green-800'
+            ? 'bg-green-50 text-green-800'
             : feedback.type === 'listening'
-            ? 'bg-yellow-100 text-yellow-800'
+            ? 'bg-yellow-50 text-yellow-800'
             : feedback.type === 'error'
-            ? 'bg-red-100 text-red-800'
-            : 'bg-gray-100 text-gray-700'
+            ? 'bg-red-50 text-red-800'
+            : 'bg-gray-50 text-gray-700'
         }`}
+        style={{
+          height: '250px',          
+          whiteSpace: 'pre-wrap',   
+          borderRadius: '1rem',
+        }}
       >
         {feedback.message}
       </div>

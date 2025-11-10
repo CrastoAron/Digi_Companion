@@ -2,3 +2,7 @@ fastapi
 uvicorn
 pyttsx3
 requests
+SpeechRecognition
+pyaudio
+pydub 
+ffmpeg-python

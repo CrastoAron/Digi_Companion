@@ -2,7 +2,7 @@ import React from 'react';
 import { ArrowRightIcon } from '@heroicons/react/24/outline';
 import ReminderCard from '../components/ReminderCard';
 import HealthChart from '../components/HealthChart';
-import VoiceAssistant from '../components/VoiceAssistant';
+import VoiceAssistant from "../components/VoiceAssistant";
 
 const mockReminders = [
   { id: 1, title: 'Take Vitamin D', time: '8:00 AM', type: 'Medication', isCompleted: false },

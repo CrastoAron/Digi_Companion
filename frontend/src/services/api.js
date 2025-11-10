@@ -4,6 +4,7 @@ import axios from 'axios';
 // 1. Define the base URL for your Express backend
 // Use the development port (e.g., 5000) where your backend server.js is running.
 const BASE_URL = 'http://localhost:5000/api';
+const AI_BASE_URL = "http://localhost:9000"; 
 
 // 2. Create a custom Axios instance
 const api = axios.create({
@@ -55,6 +56,26 @@ api.interceptors.response.use(
   }
 );
 
+// AI Speech to text & ai Service
+export async function sendTextToAI(text) {
+  const res = await fetch(`${AI_BASE_URL}/process`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  return res.json();
+}
+
+export async function sendAudioToAI(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${AI_BASE_URL}/speech`, {
+    method: "POST",
+    body: formData,
+  });
+  return res.json();
+}
+//_____________________________________________________
 
 // 5. Export the configured instance
 export default api;
