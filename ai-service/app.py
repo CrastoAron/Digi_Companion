@@ -1,6 +1,7 @@
 # ai-service/app.py
 from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from voice_utils import process_command, transcribe_audio
 from pydub import AudioSegment
 import tempfile
@@ -33,15 +34,9 @@ def home():
 
 @app.post("/process")
 async def process_text(request: Request):
-    """
-    Accepts JSON { "text": "your message" }
-    Sends text to local Ollama model and returns AI response.
-    """
     data = await request.json()
-    text = data.get("text", "").strip()
-    response = process_command(text)
-    return {"response": response}
-
+    text = data.get("text", "")
+    return StreamingResponse(process_command(text), media_type="text/plain")
 
 @app.post("/speech")
 async def speech_to_text(file: UploadFile = File(...)):

@@ -1,6 +1,10 @@
 import requests
 import speech_recognition as sr
 import os
+import codecs
+import json
+from gtts import gTTS
+
 
 # =======================
 # Configuration
@@ -51,49 +55,60 @@ def listen_from_mic():
 # =======================
 # Text-to-Text (AI Processing)
 # =======================
-def process_command(text: str) -> str:
+def process_command(text: str):
+    """
+    Streams AI-generated text from Ollama, yields parts as they arrive.
+    Automatically cleans up escape sequences and formatting.
+    """
     if not text.strip():
-        return "Please say or type something."
+        yield "Please say or type something."
+        return
 
     payload = {
         "model": MODEL,
         "prompt": text,
-        "stream": False
+        "stream": True
     }
 
     try:
-        response = requests.post(OLLAMA_URL, json=payload, timeout=60)
-        response.raise_for_status()
-        data = response.json()
-
-        if "response" in data:
-            return data["response"].strip()
-        elif "text" in data:
-            return data["text"].strip()
-        else:
-            return "Hmm, I couldn’t quite find the right words."
-
-    except requests.exceptions.ConnectionError:
-        return "It looks like the local AI engine isn’t running. Please start Ollama first."
-    except requests.exceptions.Timeout:
-        return "The AI took too long to respond. Try again in a moment."
+        with requests.post(OLLAMA_URL, json=payload, stream=True) as response:
+            response.raise_for_status()
+            for line in response.iter_lines():
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line.decode("utf-8"))
+                    if "response" in data:
+                        part = data["response"]
+                        part = codecs.decode(part, 'unicode_escape')
+                        part = part.replace('\r', '').replace('\\', '')
+                        yield part
+                except json.JSONDecodeError:
+                    yield line.decode("utf-8")
     except Exception as e:
         print("💥 Error from Ollama:", e)
-        return "Something went wrong while talking to the AI."
+        yield "⚠️ Something went wrong while talking to the AI."
 
 
 # =======================
 # Text-to-Speech
 # =======================
-def speak(text: str):
-    try:
-        import pyttsx3
-        engine = pyttsx3.init()
-        engine.say(text)
-        engine.runAndWait()
-    except Exception as e:
-        print("🔇 TTS error:", e)
+def speak(text):
 
+    if not text.strip():
+        return
+
+    try:
+        from gtts import gTTS
+        from playsound import playsound
+
+        tts = gTTS(text=text, lang="en", slow=False)
+        temp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+        tts.save(temp.name)
+        playsound(temp.name)
+        os.remove(temp.name)
+    except Exception as e:
+        print("🔇 gTTS fallback failed:", e)
 
 # =======================
 # Main Interaction Loop
@@ -107,7 +122,15 @@ if __name__ == "__main__":
         if not user_text:
             continue
 
-        ai_reply = process_command(user_text)
-        print(f"\n🤖 AI: {ai_reply}\n")
+        print("\n🤖 AI: ", end="", flush=True)
+        ai_reply_full = ""
 
-        speak(ai_reply)
+        # Stream partial replies in real time
+        for chunk in process_command(user_text):
+            print(chunk, end="", flush=True)
+            ai_reply_full += chunk
+
+        print("\n\n[✔ Done]\n")
+
+        # Speak the full reply once complete
+        speak(ai_reply_full.strip())

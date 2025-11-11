@@ -1,4 +1,5 @@
 DigiCompanion AI Service Setup Guide
+
 🧠 Overview
 
 This folder contains the AI backend for the DigiCompanion project — the intelligent companion that chats with elderly users, helps them set reminders, and assists with daily tasks.

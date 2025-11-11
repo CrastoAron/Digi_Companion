@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MicrophoneIcon, StopCircleIcon, SparklesIcon, VolumeUpIcon, VolumeXIcon } from '@heroicons/react/24/solid';
+import { MicrophoneIcon, StopCircleIcon, SparklesIcon } from '@heroicons/react/24/solid';
 
 const VoiceAssistant = () => {
   const [isRecording, setIsRecording] = useState(false);
@@ -44,41 +44,78 @@ const VoiceAssistant = () => {
           const transcript = data.text?.trim() || '[No speech detected]';
           setFeedback({ message: `🗣️ You said: "${transcript}"`, type: 'success' });
 
-          // 🧠 Step 2: Send text → Ollama AI
+          // 🧠 Step 2: Stream text from Ollama AI (real-time typing effect)
           const aiRes = await fetch('http://localhost:9000/process', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text: transcript }),
           });
-          const aiData = await aiRes.json();
-          const reply = aiData.response || '🤔 No response from AI.';
-          setFeedback({ message: reply, type: 'success' });
 
-          // 🔊 Step 3: Speak AI reply aloud
-          if (aiVoiceEnabled && 'speechSynthesis' in window) {
-            const utter = new SpeechSynthesisUtterance(reply);
-            utter.lang = 'en-IN';       // Indian English accent
-            utter.pitch = 1.0;
-            utter.rate = 0.95;
-            utter.volume = 1.0;
-            utter.voice = voices.find(v => v.lang.startsWith('en')) || null;
-            window.speechSynthesis.cancel(); // stop any ongoing speech
-            window.speechSynthesis.speak(utter);
+          if (!aiRes.body) {
+            setFeedback({ message: '⚠️ No response stream from AI.', type: 'error' });
+            return;
           }
+
+          const reader = aiRes.body.getReader();
+          const decoder = new TextDecoder();
+          let fullReply = "";
+          let words= "";
+
+          setFeedback({ message: "🤖 Thinking...", type: "processing" });
+
+          try {
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              const chunk = decoder.decode(value, { stream: true });
+              words += chunk.replace(/\\n/g, '\n');
+              fullReply += chunk.replace(/\\n/g, '\n'); 
+              setFeedback({ message: fullReply, type: 'success' });
+
+              // 🗣️ Speak the final AI reply once complete
+          if (aiVoiceEnabled && 'speechSynthesis' in window) {
+            try {
+              const utter = new SpeechSynthesisUtterance(words);
+              utter.lang = 'en-IN';
+              utter.pitch = 1.0;
+              utter.rate = 0.95;
+              utter.volume = 1.0;
+              utter.voice = voices.find(v => v.lang.startsWith('en')) || null;
+              window.speechSynthesis.cancel();
+              window.speechSynthesis.speak(utter);
+            } catch (ttsErr) {
+              console.warn("TTS failed:", ttsErr);
+            }
+          }
+
+            }
+          } catch (streamErr) {
+            console.warn("⚠️ Stream read error:", streamErr);
+          }
+
+          // ✅ Finished streaming successfully
+          if (fullReply.trim().length === 0) {
+            setFeedback({ message: '🤔 No response from AI.', type: 'error' });
+            return;
+          }
+
         } catch (err) {
-          console.error('Error:', err);
-          setFeedback({ message: '⚠️ Error processing speech.', type: 'error' });
+          console.error('Streaming error:', err);
+          setFeedback({ message: '⚠️ Error while fetching AI response.', type: 'error' });
         } finally {
           stream.getTracks().forEach((t) => t.stop());
         }
       };
 
+      // ✅ Start recording
       recorder.start();
       setIsRecording(true);
       setMediaRecorder(recorder);
       setFeedback({ message: '🎧 Listening... Speak now!', type: 'listening' });
 
+      // Auto-stop after 5 seconds
       setTimeout(() => recorder.state === 'recording' && recorder.stop(), 5000);
+
     } catch (err) {
       console.error('Microphone error:', err);
       setFeedback({ message: '🚫 Microphone access denied.', type: 'error' });
@@ -96,9 +133,7 @@ const VoiceAssistant = () => {
   const toggleVoice = () => {
     setAiVoiceEnabled(!aiVoiceEnabled);
     setFeedback({
-      message: aiVoiceEnabled
-        ? '🔇 AI voice disabled.'
-        : '🔊 AI voice enabled.',
+      message: aiVoiceEnabled ? '🔇 AI voice disabled.' : '🔊 AI voice enabled.',
       type: 'info',
     });
   };
@@ -147,8 +182,8 @@ const VoiceAssistant = () => {
             : 'bg-gray-50 text-gray-700'
         }`}
         style={{
-          height: '250px',          
-          whiteSpace: 'pre-wrap',   
+          height: '250px',
+          whiteSpace: 'pre-wrap',
           borderRadius: '1rem',
         }}
       >
