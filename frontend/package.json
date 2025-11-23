@@ -1,6 +1,7 @@
 {
   "name": "digital-companion-frontend",
   "version": "1.0.0",
+  "proxy":"http://localhost:9000",
   "description": "React frontend for the Digital Companion App.",
   "main": "src/index.js",
   "scripts": {

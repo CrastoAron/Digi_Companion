@@ -1,327 +1,261 @@
-import React, { useState, useEffect } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+// src/components/HealthChart.js
+import React, { useState, useEffect } from "react";
+import API from "../services/api";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 
-const HealthChart = ({ title = "Vitals Trend" }) => {
+export default function HealthChart() {
   const [data, setData] = useState([]);
-  const [heartRate, setHeartRate] = useState('');
-  const [bloodPressure, setBloodPressure] = useState('');
-  const [view, setView] = useState('daily');
+  const [heartRate, setHeartRate] = useState("");
+  const [bloodPressure, setBloodPressure] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  const [editingIndex, setEditingIndex] = useState(null);
-  const [editHeartRate, setEditHeartRate] = useState('');
-  const [editBloodPressure, setEditBloodPressure] = useState('');
-  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editHeartRate, setEditHeartRate] = useState("");
+  const [editBloodPressure, setEditBloodPressure] = useState("");
 
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteIndex, setDeleteIndex] = useState(null);
-
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [detailsIndex, setDetailsIndex] = useState(null);
-
+  // ✅ load data
   useEffect(() => {
-    const storedData = JSON.parse(localStorage.getItem('healthData')) || [];
-    storedData.sort((a, b) => a.timestamp - b.timestamp);
-    setData(storedData);
+    (async () => {
+      try {
+        const res = await API.get("/health");
+        const formatted = res.data.map((item) => {
+          const date = new Date(item.timestamp);
+          return {
+            _id: item._id,
+            HeartRate: item.heartRate,
+            BloodPressure: item.bloodPressure,
+            label: date.toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+            }),
+            fullLabel: date.toLocaleString(),
+          };
+        });
+        setData(formatted);
+      } catch (err) {
+        console.error("Health fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem('healthData', JSON.stringify(data));
-  }, [data]);
+  // ✅ add entry
+  const addEntry = async () => {
+    if (!heartRate || !bloodPressure) return alert("Enter both values");
 
-  // Add new entry
-  const handleAddData = () => {
-    if (!heartRate || !bloodPressure) return;
+    try {
+      const res = await API.post("/health", {
+        heartRate: Number(heartRate),
+        bloodPressure: Number(bloodPressure),
+      });
 
-    const now = new Date();
-    const dateLabel = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const timeLabel = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const item = res.data;
+      const date = new Date(item.timestamp);
 
-    const newEntry = {
-      name: dateLabel,
-      fullLabel: `${dateLabel} ${timeLabel}`,
-      HeartRate: parseInt(heartRate),
-      BloodPressure: parseInt(bloodPressure),
-      timestamp: now.getTime(),
-    };
+      setData((prev) => [
+        ...prev,
+        {
+          _id: item._id,
+          HeartRate: item.heartRate,
+          BloodPressure: item.bloodPressure,
+          label: date.toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+          }),
+          fullLabel: date.toLocaleString(),
+        },
+      ]);
 
-    setData(prev => [...prev, newEntry].sort((a, b) => a.timestamp - b.timestamp));
-    setHeartRate('');
-    setBloodPressure('');
-  };
-
-  // Edit handling
-  const startEdit = (index) => {
-    setEditingIndex(index);
-    setEditHeartRate(data[index].HeartRate);
-    setEditBloodPressure(data[index].BloodPressure);
-    setShowEditModal(true);
-  };
-
-  const saveEdit = () => {
-    if (editingIndex === null) return;
-    const updatedData = [...data];
-    updatedData[editingIndex] = {
-      ...updatedData[editingIndex],
-      HeartRate: parseInt(editHeartRate),
-      BloodPressure: parseInt(editBloodPressure),
-    };
-    setData(updatedData);
-    setEditingIndex(null);
-    setShowEditModal(false);
-  };
-
-  const cancelEdit = () => {
-    setEditingIndex(null);
-    setShowEditModal(false);
-  };
-
-  // Delete handling
-  const confirmDelete = (index) => {
-    setDeleteIndex(index);
-    setShowDeleteModal(true);
-  };
-
-  const handleDelete = () => {
-    if (deleteIndex !== null) {
-      setData(prev => prev.filter((_, i) => i !== deleteIndex));
-      setDeleteIndex(null);
-      setShowDeleteModal(false);
+      setHeartRate("");
+      setBloodPressure("");
+    } catch (err) {
+      alert("Failed to add entry");
     }
   };
 
-  const cancelDelete = () => {
-    setDeleteIndex(null);
-    setShowDeleteModal(false);
+  // ✅ update entry
+  const updateEntry = async (id) => {
+    try {
+      const res = await API.patch(`/health/${id}`, {
+        heartRate: Number(editHeartRate),
+        bloodPressure: Number(editBloodPressure),
+      });
+
+      setData((prev) =>
+        prev.map((item) =>
+          item._id === id
+            ? {
+                ...item,
+                HeartRate: res.data.heartRate,
+                BloodPressure: res.data.bloodPressure,
+              }
+            : item
+        )
+      );
+
+      setEditingId(null);
+    } catch (err) {
+      alert("Update failed");
+    }
   };
 
-  // View Details
-  const viewDetails = (index) => {
-    setDetailsIndex(index);
-    setShowDetailsModal(true);
+  // ✅ delete entry
+  const deleteEntry = async (id) => {
+    try {
+      await API.delete(`/health/${id}`);
+      setData((prev) => prev.filter((item) => item._id !== id));
+    } catch (err) {
+      alert("Failed to delete");
+    }
   };
 
-  const closeDetails = () => {
-    setDetailsIndex(null);
-    setShowDetailsModal(false);
-  };
-
-  // Chart data aggregation
-  const getChartData = () => {
-    if (view === 'daily') return data;
-
-    const grouped = {};
-    data.forEach(entry => {
-      const date = new Date(entry.timestamp);
-      let key, shortLabel;
-
-      if (view === 'weekly') {
-        const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
-        const pastDays = (date - firstDayOfYear) / 86400000;
-        const weekNumber = Math.ceil((pastDays + firstDayOfYear.getDay() + 1) / 7);
-        key = `Week ${weekNumber} ${date.getFullYear()}`;
-        shortLabel = `W${weekNumber}`;
-      } else if (view === 'monthly') {
-        key = `${date.toLocaleString('default', { month: 'short' })} ${date.getFullYear()}`;
-        shortLabel = date.toLocaleString('default', { month: 'short' });
-      }
-
-      if (!grouped[key]) grouped[key] = { HeartRate: [], BloodPressure: [], shortLabel, fullLabel: key };
-      grouped[key].HeartRate.push(entry.HeartRate);
-      grouped[key].BloodPressure.push(entry.BloodPressure);
-    });
-
-    return Object.values(grouped).map(g => ({
-      name: g.shortLabel,
-      fullLabel: g.fullLabel,
-      HeartRate: Math.round(g.HeartRate.reduce((a, b) => a + b, 0) / g.HeartRate.length),
-      BloodPressure: Math.round(g.BloodPressure.reduce((a, b) => a + b, 0) / g.BloodPressure.length),
-    }));
-  };
-
-  const chartData = getChartData();
+  if (loading) return <div>Loading health data...</div>;
 
   return (
     <div className="p-4 bg-white dark:bg-gray-800 rounded-xl shadow-md">
-      <h3 className="text-lg font-semibold mb-2">{title}</h3>
 
-      {/* Input form */}
-      <div className="flex gap-2 mb-4">
+      <h3 className="text-lg font-semibold mb-4">Vitals Overview</h3>
+
+      {/* ✅ Analytics */}
+      {data.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6 text-center">
+          <div className="p-3 bg-green-100 dark:bg-green-800 rounded">
+            Avg HR:
+            <div className="font-bold">
+              {Math.round(data.reduce((a, b) => a + b.HeartRate, 0) / data.length)}
+            </div>
+          </div>
+
+          <div className="p-3 bg-indigo-100 dark:bg-indigo-800 rounded">
+            Avg BP:
+            <div className="font-bold">
+              {Math.round(data.reduce((a, b) => a + b.BloodPressure, 0) / data.length)}
+            </div>
+          </div>
+
+          <div className="p-3 bg-yellow-100 dark:bg-yellow-800 rounded">
+            Max HR:
+            <div className="font-bold">
+              {Math.max(...data.map((e) => e.HeartRate))}
+            </div>
+          </div>
+
+          <div className="p-3 bg-red-100 dark:bg-red-800 rounded">
+            Max BP:
+            <div className="font-bold">
+              {Math.max(...data.map((e) => e.BloodPressure))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ Alerts */}
+      {data.some((e) => e.HeartRate > 110 || e.BloodPressure > 140) && (
+        <div className="p-3 mb-6 bg-red-200 dark:bg-red-800 text-red-900 dark:text-red-100 rounded text-sm">
+          ⚠️ Health Alert: Some readings are higher than normal — consider monitoring!
+        </div>
+      )}
+
+      {/* ✅ Input */}
+      <div className="flex gap-3 mb-6">
         <input
           type="number"
           placeholder="Heart Rate"
           value={heartRate}
-          onChange={e => setHeartRate(e.target.value)}
+          onChange={(e) => setHeartRate(e.target.value)}
           className="p-2 border rounded w-32"
         />
         <input
           type="number"
           placeholder="Blood Pressure"
           value={bloodPressure}
-          onChange={e => setBloodPressure(e.target.value)}
-          className="p-2 border rounded w-32"
+          onChange={(e) => setBloodPressure(e.target.value)}
+          className="p-2 border rounded w-40"
         />
-        <button onClick={handleAddData} className="bg-blue-500 text-white px-4 py-2 rounded">
+        <button onClick={addEntry} className="bg-blue-600 text-white px-4 py-2 rounded">
           Add
         </button>
-        <select
-          value={view}
-          onChange={e => setView(e.target.value)}
-          className="p-2 border rounded ml-2"
-        >
-          <option value="daily">Daily</option>
-          <option value="weekly">Weekly</option>
-          <option value="monthly">Monthly</option>
-        </select>
       </div>
 
-      {/* Chart */}
-      <div className="w-full h-64 mb-4">
+      {/* ✅ Chart */}
+      <div className="w-full h-72 mb-6">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+          <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
+            <XAxis dataKey="label" />
             <YAxis />
-            <Tooltip
-              formatter={(value, name) => [value, name]}
-              labelFormatter={(label, payload) => payload && payload.length ? payload[0].payload.fullLabel : label}
-            />
+            <Tooltip labelFormatter={(v, p) => p[0]?.payload.fullLabel} />
             <Legend />
-            <Line type="monotone" dataKey="HeartRate" stroke="#ef4444" strokeWidth={2} activeDot={{ r: 6 }} />
-            <Line type="monotone" dataKey="BloodPressure" stroke="#4f46e5" strokeWidth={2} activeDot={{ r: 6 }} />
+            <Line type="monotone" dataKey="HeartRate" stroke="#ef4444" strokeWidth={2} />
+            <Line type="monotone" dataKey="BloodPressure" stroke="#4f46e5" strokeWidth={2} />
           </LineChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Last updated */}
-      <div className="text-xs text-gray-500 mb-4">
-        Last updated: {data.length ? data[data.length - 1].fullLabel : 'No data yet'}
-      </div>
-
-      {/* Data List */}
+      {/* ✅ Editable List */}
       <div className="space-y-2">
-        {data.map((entry, index) => (
-          <div key={index} className="flex items-center justify-between bg-gray-100 dark:bg-gray-700 p-2 rounded cursor-pointer"
-               onClick={() => viewDetails(index)}>
-            <div className="flex-1">
-              {entry.fullLabel} — HR: {entry.HeartRate}, BP: {entry.BloodPressure}
-            </div>
-            <div className="flex gap-2">
-              <button onClick={(e) => { e.stopPropagation(); startEdit(index); }} className="bg-yellow-400 text-white px-2 py-1 rounded">Edit</button>
-              <button onClick={(e) => { e.stopPropagation(); confirmDelete(index); }} className="bg-red-500 text-white px-2 py-1 rounded">Delete</button>
-            </div>
+        {data.map((entry) => (
+          <div key={entry._id} className="flex justify-between bg-gray-100 dark:bg-gray-700 p-2 rounded">
+
+            {editingId === entry._id ? (
+              <>
+                <input
+                  type="number"
+                  value={editHeartRate}
+                  onChange={(e) => setEditHeartRate(e.target.value)}
+                  className="p-1 w-20 rounded"
+                />
+                <input
+                  type="number"
+                  value={editBloodPressure}
+                  onChange={(e) => setEditBloodPressure(e.target.value)}
+                  className="p-1 w-24 rounded"
+                />
+                <button onClick={() => updateEntry(entry._id)} className="bg-green-500 text-white px-2 py-1 rounded text-xs">
+                  Save
+                </button>
+                <button onClick={() => setEditingId(null)} className="bg-gray-400 text-white px-2 py-1 rounded text-xs">
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                <span>
+                  {entry.fullLabel} — HR: {entry.HeartRate}, BP: {entry.BloodPressure}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setEditingId(entry._id);
+                      setEditHeartRate(entry.HeartRate);
+                      setEditBloodPressure(entry.BloodPressure);
+                    }}
+                    className="bg-blue-500 text-white px-2 py-1 rounded text-xs"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => deleteEntry(entry._id)}
+                    className="bg-red-500 text-white px-2 py-1 rounded text-xs"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         ))}
       </div>
-
-      {/* Delete Modal */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg w-80">
-            <h4 className="text-lg font-semibold mb-4">Confirm Delete</h4>
-            <p className="mb-4">
-              Are you sure you want to delete <strong>{data[deleteIndex]?.fullLabel}</strong>?
-            </p>
-            <div className="flex justify-end gap-2">
-              <button onClick={cancelDelete} className="px-4 py-2 bg-gray-500 text-white rounded">Cancel</button>
-              <button onClick={handleDelete} className="px-4 py-2 bg-red-500 text-white rounded">Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Modal */}
-      {showEditModal && editingIndex !== null && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg w-80">
-            <h4 className="text-lg font-semibold mb-4">Edit Entry</h4>
-            <div className="flex gap-2 mb-4">
-              <input
-                type="number"
-                value={editHeartRate}
-                onChange={e => setEditHeartRate(e.target.value)}
-                className="p-2 border rounded w-32"
-                placeholder="Heart Rate"
-              />
-              <input
-                type="number"
-                value={editBloodPressure}
-                onChange={e => setEditBloodPressure(e.target.value)}
-                className="p-2 border rounded w-32"
-                placeholder="Blood Pressure"
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <button onClick={cancelEdit} className="px-4 py-2 bg-gray-500 text-white rounded">Cancel</button>
-              <button onClick={saveEdit} className="px-4 py-2 bg-green-500 text-white rounded">Save</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* View Details Modal with Mini Chart and Trend */}
-      {showDetailsModal && detailsIndex !== null && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg w-96">
-            <h4 className="text-lg font-semibold mb-4">Entry Details</h4>
-
-            <p><strong>Date & Time:</strong> {data[detailsIndex].fullLabel}</p>
-            <p>
-              <strong>Heart Rate:</strong> {data[detailsIndex].HeartRate}{" "}
-              {detailsIndex > 0 && (
-                <span className={data[detailsIndex].HeartRate > data[detailsIndex - 1].HeartRate ? 'text-red-500' : 'text-green-500'}>
-                  ({data[detailsIndex].HeartRate > data[detailsIndex - 1].HeartRate ? '↑' : '↓'} compared to previous)
-                </span>
-              )}
-            </p>
-            <p>
-              <strong>Blood Pressure:</strong> {data[detailsIndex].BloodPressure}{" "}
-              {detailsIndex > 0 && (
-                <span className={data[detailsIndex].BloodPressure > data[detailsIndex - 1].BloodPressure ? 'text-red-500' : 'text-green-500'}>
-                  ({data[detailsIndex].BloodPressure > data[detailsIndex - 1].BloodPressure ? '↑' : '↓'} compared to previous)
-                </span>
-              )}
-            </p>
-
-            {/* Mini trend chart (last 7 entries) */}
-            <div className="w-full h-48 mt-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data.slice(Math.max(0, detailsIndex - 6), detailsIndex + 1)}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip
-                    formatter={(value, name) => [value, name]}
-                    labelFormatter={(label, payload) => payload && payload.length ? payload[0].payload.fullLabel : label}
-                  />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="HeartRate"
-                    stroke="#ef4444"
-                    strokeWidth={2}
-                    activeDot={{ r: 6 }}
-                    dot={(props) => props.index === Math.min(6, detailsIndex) ? <circle {...props} r={8} fill="#ef4444" /> : <circle {...props} r={3} fill="#ef4444" />}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="BloodPressure"
-                    stroke="#4f46e5"
-                    strokeWidth={2}
-                    activeDot={{ r: 6 }}
-                    dot={(props) => props.index === Math.min(6, detailsIndex) ? <circle {...props} r={8} fill="#4f46e5" /> : <circle {...props} r={3} fill="#4f46e5" />}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="flex justify-end mt-4">
-              <button onClick={closeDetails} className="px-4 py-2 bg-blue-500 text-white rounded">Close</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
-};
-
-export default HealthChart;
+}
