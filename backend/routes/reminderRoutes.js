@@ -11,6 +11,9 @@ router.get("/", auth, controller.getAll);
 // ✅ CREATE new reminder
 router.post("/", auth, controller.create);
 
+// ⭐ ✅ UPDATE reminder (added new feature)
+router.put("/:id", auth, controller.update);
+
 // ✅ TOGGLE completion
 router.patch("/:id", auth, controller.toggle);
 

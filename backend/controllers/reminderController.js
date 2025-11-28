@@ -1,8 +1,6 @@
-// backend/controllers/reminderController.js
-
 const Reminder = require("../models/Reminder");
 
-// ✅ GET all reminders for logged-in user
+// GET all
 exports.getAll = async (req, res) => {
   try {
     const items = await Reminder.find({ userId: req.userId }).sort({ createdAt: -1 });
@@ -13,7 +11,7 @@ exports.getAll = async (req, res) => {
   }
 };
 
-// ✅ CREATE a new reminder
+// CREATE
 exports.create = async (req, res) => {
   try {
     const { title, time, type = "Other" } = req.body;
@@ -36,7 +34,29 @@ exports.create = async (req, res) => {
   }
 };
 
-// ✅ TOGGLE completion
+// ⭐⭐ ADD THIS ⭐⭐
+exports.update = async (req, res) => {
+  try {
+    const updated = await Reminder.findOneAndUpdate(
+      { _id: req.params.id, userId: req.userId },
+      req.body,
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ message: "Reminder not found" });
+    }
+
+    res.json(updated);
+  } catch (err) {
+    console.error("update error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+// ⭐⭐ END ADDITION ⭐⭐
+
+
+// TOGGLE
 exports.toggle = async (req, res) => {
   try {
     const reminder = await Reminder.findOne({ _id: req.params.id, userId: req.userId });
@@ -55,7 +75,7 @@ exports.toggle = async (req, res) => {
   }
 };
 
-// ✅ DELETE reminder
+// DELETE
 exports.remove = async (req, res) => {
   try {
     const deleted = await Reminder.findOneAndDelete({

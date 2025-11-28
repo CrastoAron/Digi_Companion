@@ -1,73 +1,63 @@
-import requests
+# ai-service/voice_utils.py
 import speech_recognition as sr
-import os
-import codecs
+import requests
 import json
-from gtts import gTTS
-
+import codecs
 
 # =======================
-# Configuration
+# CONFIG
 # =======================
 OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL = "mistral"
-
+MODEL = "llama3:instruct"   # use the faster model you pulled with ollama
+# If you want shorter answers by default, tune NUM_PREDICT
+NUM_PREDICT = 80
 
 # =======================
 # Speech-to-Text
 # =======================
 def transcribe_audio(file_path):
+    """
+    Convert wav file to text using SpeechRecognition (Google).
+    Short ambient noise calibration for speed.
+    """
     recognizer = sr.Recognizer()
     with sr.AudioFile(file_path) as source:
-        recognizer.adjust_for_ambient_noise(source, duration=0.5)
+        # short calibration (faster)
+        recognizer.adjust_for_ambient_noise(source, duration=0.1)
         audio = recognizer.record(source)
+
     try:
         text = recognizer.recognize_google(audio)
         return {"text": text}
     except sr.UnknownValueError:
         return {"text": ""}
     except sr.RequestError:
-        return {"text": "API unavailable or network issue"}
-
-
-def listen_from_mic():
-    recognizer = sr.Recognizer()
-    mic = sr.Microphone()
-
-    with mic as source:
-        print("\n🎙️  Listening... (speak now)")
-        recognizer.adjust_for_ambient_noise(source, duration=0.5)
-        audio = recognizer.listen(source)
-
-    try:
-        print("🧠  Processing speech...")
-        text = recognizer.recognize_google(audio)
-        print(f"🗣️  You said: {text}")
-        return text
-    except sr.UnknownValueError:
-        print("❌ Could not understand audio.")
-        return ""
-    except sr.RequestError:
-        print("⚠️ Speech Recognition service unavailable.")
-        return ""
+        return {"text": "Speech API unavailable"}
 
 
 # =======================
-# Text-to-Text (AI Processing)
+# Streaming Text-to-Text (AI)
 # =======================
 def process_command(text: str):
     """
-    Streams AI-generated text from Ollama, yields parts as they arrive.
-    Automatically cleans up escape sequences and formatting.
+    Stream tokens from Ollama (stream=True). Yields chunk strings.
+    The frontend will read these chunks and speak them in phrases.
     """
-    if not text.strip():
-        yield "Please say or type something."
+    if not text or not text.strip():
+        yield "Please say something."
         return
+
+    # Add a short "fast reply" instruction to make replies concise and faster.
+    fast_prompt = (
+        "Reply briefly in simple, clear language. Use 1–2 short sentences.\n\nUser: "
+        + text
+    )
 
     payload = {
         "model": MODEL,
-        "prompt": text,
-        "stream": True
+        "prompt": fast_prompt,
+        "stream": True,
+        "num_predict": NUM_PREDICT
     }
 
     try:
@@ -78,59 +68,15 @@ def process_command(text: str):
                     continue
                 try:
                     data = json.loads(line.decode("utf-8"))
+                    # Ollama may send JSON lines with key "response" carrying a chunk
                     if "response" in data:
                         part = data["response"]
-                        part = codecs.decode(part, 'unicode_escape')
-                        part = part.replace('\r', '').replace('\\', '')
+                        # Clean a little; avoid altering spacing
+                        part = codecs.decode(part, "unicode_escape")
                         yield part
-                except json.JSONDecodeError:
-                    yield line.decode("utf-8")
+                except Exception:
+                    # ignore non-json or decode errors
+                    continue
     except Exception as e:
         print("💥 Error from Ollama:", e)
-        yield "⚠️ Something went wrong while talking to the AI."
-
-
-# =======================
-# Text-to-Speech
-# =======================
-def speak(text):
-
-    if not text.strip():
-        return
-
-    try:
-        from gtts import gTTS
-        from playsound import playsound
-
-        tts = gTTS(text=text, lang="en", slow=False)
-        temp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
-        tts.save(temp.name)
-        playsound(temp.name)
-        os.remove(temp.name)
-    except Exception as e:
-        print("🔇 gTTS fallback failed:", e)
-
-# =======================
-# Main Interaction Loop
-# =======================
-if __name__ == "__main__":
-    print("🧠 Digi Companion (Local AI + Speech)")
-    print("Say something to start or press Ctrl+C to quit.\n")
-
-    while True:
-        user_text = listen_from_mic()
-        if not user_text:
-            continue
-
-        print("\n🤖 AI: ", end="", flush=True)
-        ai_reply_full = ""
-
-        # Stream partial replies in real time
-        for chunk in process_command(user_text):
-            print(chunk, end="", flush=True)
-            ai_reply_full += chunk
-
-        print("\n\n[✔ Done]\n")
-
-        # Speak the full reply once complete
-        speak(ai_reply_full.strip())
+        yield "AI service error. Please try again."

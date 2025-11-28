@@ -22,7 +22,7 @@ export default function HealthChart() {
   const [editHeartRate, setEditHeartRate] = useState("");
   const [editBloodPressure, setEditBloodPressure] = useState("");
 
-  // ✅ load data
+  // Load data
   useEffect(() => {
     (async () => {
       try {
@@ -49,7 +49,7 @@ export default function HealthChart() {
     })();
   }, []);
 
-  // ✅ add entry
+  // Add entry
   const addEntry = async () => {
     if (!heartRate || !bloodPressure) return alert("Enter both values");
 
@@ -83,7 +83,7 @@ export default function HealthChart() {
     }
   };
 
-  // ✅ update entry
+  // Update entry
   const updateEntry = async (id) => {
     try {
       const res = await API.patch(`/health/${id}`, {
@@ -109,7 +109,7 @@ export default function HealthChart() {
     }
   };
 
-  // ✅ delete entry
+  // Delete entry
   const deleteEntry = async (id) => {
     try {
       await API.delete(`/health/${id}`);
@@ -119,120 +119,153 @@ export default function HealthChart() {
     }
   };
 
-  if (loading) return <div>Loading health data...</div>;
+  if (loading)
+    return (
+      <div className="p-6 text-center text-gray-600 dark:text-gray-300">
+        Loading health data...
+      </div>
+    );
 
   return (
-    <div className="p-4 bg-white dark:bg-gray-800 rounded-xl shadow-md">
+    <div className="p-6 bg-white dark:bg-gray-800 rounded-2xl shadow-xl">
 
-      <h3 className="text-lg font-semibold mb-4">Vitals Overview</h3>
+      {/* HEADER */}
+      <h3 className="text-2xl font-bold mb-6 text-gray-800 dark:text-white">
+        Vitals Overview
+      </h3>
 
-      {/* ✅ Analytics */}
+      {/* METRIC CARDS */}
       {data.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6 text-center">
-          <div className="p-3 bg-green-100 dark:bg-green-800 rounded">
-            Avg HR:
-            <div className="font-bold">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+          <div className="p-4 bg-green-100 dark:bg-green-900 text-center rounded-xl shadow">
+            <p className="text-sm opacity-70">Avg HR</p>
+            <p className="text-2xl font-bold">
               {Math.round(data.reduce((a, b) => a + b.HeartRate, 0) / data.length)}
-            </div>
+            </p>
           </div>
 
-          <div className="p-3 bg-indigo-100 dark:bg-indigo-800 rounded">
-            Avg BP:
-            <div className="font-bold">
-              {Math.round(data.reduce((a, b) => a + b.BloodPressure, 0) / data.length)}
-            </div>
+          <div className="p-4 bg-indigo-100 dark:bg-indigo-900 text-center rounded-xl shadow">
+            <p className="text-sm opacity-70">Avg BP</p>
+            <p className="text-2xl font-bold">
+              {Math.round(
+                data.reduce((a, b) => a + b.BloodPressure, 0) / data.length
+              )}
+            </p>
           </div>
 
-          <div className="p-3 bg-yellow-100 dark:bg-yellow-800 rounded">
-            Max HR:
-            <div className="font-bold">
+          <div className="p-4 bg-yellow-100 dark:bg-yellow-900 text-center rounded-xl shadow">
+            <p className="text-sm opacity-70">Max HR</p>
+            <p className="text-xl font-bold">
               {Math.max(...data.map((e) => e.HeartRate))}
-            </div>
+            </p>
           </div>
 
-          <div className="p-3 bg-red-100 dark:bg-red-800 rounded">
-            Max BP:
-            <div className="font-bold">
+          <div className="p-4 bg-red-100 dark:bg-red-900 text-center rounded-xl shadow">
+            <p className="text-sm opacity-70">Max BP</p>
+            <p className="text-xl font-bold">
               {Math.max(...data.map((e) => e.BloodPressure))}
-            </div>
+            </p>
           </div>
         </div>
       )}
 
-      {/* ✅ Alerts */}
+      {/* ALERT BOX */}
       {data.some((e) => e.HeartRate > 110 || e.BloodPressure > 140) && (
-        <div className="p-3 mb-6 bg-red-200 dark:bg-red-800 text-red-900 dark:text-red-100 rounded text-sm">
-          ⚠️ Health Alert: Some readings are higher than normal — consider monitoring!
+        <div className="mb-8 p-4 bg-red-200 dark:bg-red-800 text-red-900 dark:text-red-100 rounded-xl shadow text-sm">
+          ⚠️ Some readings are higher than normal — please monitor closely.
         </div>
       )}
 
-      {/* ✅ Input */}
-      <div className="flex gap-3 mb-6">
+      {/* INPUT SECTION */}
+      <div className="flex flex-wrap gap-3 mb-8">
         <input
           type="number"
           placeholder="Heart Rate"
           value={heartRate}
           onChange={(e) => setHeartRate(e.target.value)}
-          className="p-2 border rounded w-32"
+          className="p-3 border rounded-lg w-32 bg-gray-50 dark:bg-gray-700 dark:border-gray-600"
         />
         <input
           type="number"
           placeholder="Blood Pressure"
           value={bloodPressure}
           onChange={(e) => setBloodPressure(e.target.value)}
-          className="p-2 border rounded w-40"
+          className="p-3 border rounded-lg w-40 bg-gray-50 dark:bg-gray-700 dark:border-gray-600"
         />
-        <button onClick={addEntry} className="bg-blue-600 text-white px-4 py-2 rounded">
+        <button
+          onClick={addEntry}
+          className="px-5 py-3 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700"
+        >
           Add
         </button>
       </div>
 
-      {/* ✅ Chart */}
-      <div className="w-full h-72 mb-6">
+      {/* CHART */}
+      <div className="w-full h-80 mb-10 bg-gray-50 dark:bg-gray-700 rounded-xl p-4 shadow-inner">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#ccc" />
             <XAxis dataKey="label" />
             <YAxis />
             <Tooltip labelFormatter={(v, p) => p[0]?.payload.fullLabel} />
             <Legend />
-            <Line type="monotone" dataKey="HeartRate" stroke="#ef4444" strokeWidth={2} />
-            <Line type="monotone" dataKey="BloodPressure" stroke="#4f46e5" strokeWidth={2} />
+            <Line
+              type="monotone"
+              dataKey="HeartRate"
+              stroke="#ef4444"
+              strokeWidth={3}
+            />
+            <Line
+              type="monotone"
+              dataKey="BloodPressure"
+              stroke="#4f46e5"
+              strokeWidth={3}
+            />
           </LineChart>
         </ResponsiveContainer>
       </div>
 
-      {/* ✅ Editable List */}
-      <div className="space-y-2">
+      {/* HISTORY LIST */}
+      <div className="space-y-3">
         {data.map((entry) => (
-          <div key={entry._id} className="flex justify-between bg-gray-100 dark:bg-gray-700 p-2 rounded">
-
+          <div
+            key={entry._id}
+            className="flex justify-between items-center bg-gray-100 dark:bg-gray-700 p-3 rounded-lg shadow-sm"
+          >
             {editingId === entry._id ? (
               <>
                 <input
                   type="number"
                   value={editHeartRate}
                   onChange={(e) => setEditHeartRate(e.target.value)}
-                  className="p-1 w-20 rounded"
+                  className="p-2 w-24 rounded bg-gray-50 dark:bg-gray-600"
                 />
                 <input
                   type="number"
                   value={editBloodPressure}
                   onChange={(e) => setEditBloodPressure(e.target.value)}
-                  className="p-1 w-24 rounded"
+                  className="p-2 w-28 rounded bg-gray-50 dark:bg-gray-600"
                 />
-                <button onClick={() => updateEntry(entry._id)} className="bg-green-500 text-white px-2 py-1 rounded text-xs">
+                <button
+                  onClick={() => updateEntry(entry._id)}
+                  className="px-3 py-1 bg-green-600 text-white rounded text-xs"
+                >
                   Save
                 </button>
-                <button onClick={() => setEditingId(null)} className="bg-gray-400 text-white px-2 py-1 rounded text-xs">
+                <button
+                  onClick={() => setEditingId(null)}
+                  className="px-3 py-1 bg-gray-500 text-white rounded text-xs"
+                >
                   Cancel
                 </button>
               </>
             ) : (
               <>
-                <span>
-                  {entry.fullLabel} — HR: {entry.HeartRate}, BP: {entry.BloodPressure}
+                <span className="text-sm">
+                  <strong>{entry.fullLabel}</strong> — HR:{" "}
+                  {entry.HeartRate}, BP: {entry.BloodPressure}
                 </span>
+
                 <div className="flex gap-2">
                   <button
                     onClick={() => {
@@ -240,13 +273,13 @@ export default function HealthChart() {
                       setEditHeartRate(entry.HeartRate);
                       setEditBloodPressure(entry.BloodPressure);
                     }}
-                    className="bg-blue-500 text-white px-2 py-1 rounded text-xs"
+                    className="px-3 py-1 bg-blue-600 text-white rounded text-xs"
                   >
                     Edit
                   </button>
                   <button
                     onClick={() => deleteEntry(entry._id)}
-                    className="bg-red-500 text-white px-2 py-1 rounded text-xs"
+                    className="px-3 py-1 bg-red-600 text-white rounded text-xs"
                   >
                     Delete
                   </button>
